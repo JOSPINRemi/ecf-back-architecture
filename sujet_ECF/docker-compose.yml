@@ -1,0 +1,124 @@
+version: "3"
+
+services:
+  bdd:
+    container_name: bdd
+    image: mysql
+    volumes:
+      - db_ecf:/var/lib/mysql
+    restart: always
+    ports:
+      - "3307:${DB_PORT}"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    networks:
+      - ecf_network
+
+  redis:
+    container_name: redis
+    image: redis
+    volumes:
+      - redis-data:/data
+    restart: always
+    ports:
+      - "${REDIS_PORT}:8083"
+    environment:
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_HOST_PASSWORD: ${REDIS_PASSWORD}
+    command: /bin/sh -c 'redis-server --requirepass $$REDIS_HOST_PASSWORD'
+    depends_on:
+      - bdd
+    networks:
+      - ecf_network
+
+  authentication-service:
+    container_name: authentication-service
+    ports:
+      - "${AUTHENTICATION_SERVICE_PORT}:8080"
+    build:
+      context: ./server
+      dockerfile: authentication-service/Dockerfile
+    environment:
+      PORT: ${AUTHENTICATION_SERVICE_PORT}
+      ACTIVE_PROFILE: ${ACTIVE_PROFILE}
+      DB_HOST: bdd
+      DB_PORT: ${DB_PORT}
+      DB_SCHEMA: ${DB_SCHEMA}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+    restart: always
+    depends_on:
+      - bdd
+    networks:
+      - ecf_network
+
+  payment-service:
+    container_name: payment-service
+    ports:
+      - "${PAYMENT_SERVICE_PORT}:8081"
+    build:
+      context: ./server
+      dockerfile: payment-service/Dockerfile
+    environment:
+      PORT: ${PAYMENT_SERVICE_PORT}
+      ACTIVE_PROFILE: ${ACTIVE_PROFILE}
+      DB_HOST: bdd
+      DB_PORT: ${DB_PORT}
+      DB_SCHEMA: ${DB_SCHEMA}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+    restart: always
+    depends_on:
+      - bdd
+    networks:
+      - ecf_network
+
+  common-data-service:
+    container_name: common-data-service
+    ports:
+      - "${COMMON_DATA_SERVICE_PORT}:8082"
+    build:
+      context: ./server
+      dockerfile: common-data-service/Dockerfile
+    environment:
+      PORT: ${COMMON_DATA_SERVICE_PORT}
+      ACTIVE_PROFILE: ${ACTIVE_PROFILE}
+      DB_HOST: bdd
+      DB_PORT: ${DB_PORT}
+      DB_SCHEMA: ${DB_SCHEMA}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+
+      REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    restart: always
+    depends_on:
+      - bdd
+    networks:
+      - ecf_network
+
+  client:
+    container_name: client
+    ports:
+      - "${REACT_APP_PORT}:80"
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    depends_on:
+      - authentication-service
+      - common-data-service
+      - payment-service
+    networks:
+      - ecf_network
+
+networks:
+  ecf_network:
+    driver: bridge
+
+volumes:
+  db_ecf:
+  redis-data:
